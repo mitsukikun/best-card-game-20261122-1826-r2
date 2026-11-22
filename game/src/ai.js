@@ -1,59 +1,64 @@
-// Cinder's brain: a greedy, readable opponent. She looks at the table and
-// picks the play a human would telegraph — finish you when she can, patch
-// herself up when she is hurting, otherwise spend her mana on the hardest
-// hit she can afford. Ties break on the seeded rng, so a seed replays.
+// Ember Pact — Cinder's head, and the autopilot's: a greedy card chooser.
+// It reads the table, weighs every affordable card, and plays the best.
+// The same chooser drives the staged shots, so they play like a real duel.
 
-import { CARDS } from "./config.js";
+import { CARD_BY_ID } from './config.js';
+import { legalPlays } from './world.js';
 
-// Value of one card on this table, from Cinder's side. Damage is worth
-// more when it can end the duel; healing and block are worth more when
-// she is low; a card that also draws is worth a little extra.
-function cardValue(world, cardId) {
-  const def = CARDS[cardId];
-  const me = world.enemy;
-  const you = world.player;
-  let value = 0;
-  const damage = (def.damage || 0) * (def.hits || 1);
-  if (damage) {
-    value += damage * 10;
-    if (you.hp - Math.max(0, damage - you.block) <= 0) value += 1000;
-    if (you.hp <= 6) value += damage * 4;
-  }
-  if (def.block) {
-    value += def.block * (me.hp <= 12 ? 9 : 2);
-    if (you.hp <= 0) value += 0;
-  }
-  if (def.heal) {
-    const missing = me.maxHp - me.hp;
-    value += Math.min(def.heal, missing) * (me.hp <= 10 ? 9 : 1);
-  }
-  if (def.draw) value += 6;
-  return value / def.cost;
+/**
+ * What a card is worth to the side playing it, right now.
+ * Damage is worth its face value; block and healing count a little less
+ * (they only matter while hurt or threatened); a draw is worth a card.
+ * Lethal damage is worth everything: the duel ends on it.
+ */
+export function cardValue(state, side, card) {
+  const who = state[side];
+  const foe = side === 'player' ? state.enemy : state.player;
+  if (card.damage * card.hits >= foe.hp + foe.block) return 1000;
+  let value = card.damage * card.hits;
+  value += card.block * 0.8;
+  if (who.hp < who.maxHp) value += Math.min(card.heal, who.maxHp - who.hp) * 0.9;
+  value += card.draw * 1.5;
+  if (card.block > 0 && who.hp >= who.maxHp && foe.hp > 10) value -= 0.5;
+  return value;
 }
 
-// Choose Cinder's plays for this turn: repeatedly take the best-value
-// affordable card until her mana runs out or nothing is worth playing.
-export function chooseAiPlays(world) {
-  const plays = [];
-  let mana = world.enemy.mana;
-  const hand = world.enemy.hand.slice();
-  for (;;) {
-    let best = -1;
-    let bestValue = 0;
-    for (let i = 0; i < hand.length; i += 1) {
-      const def = CARDS[hand[i]];
-      if (!def || def.cost > mana) continue;
-      const jitter = world.rng() * 2;
-      const value = cardValue(world, hand[i]) + jitter;
-      if (value > bestValue) {
-        bestValue = value;
-        best = i;
-      }
+/**
+ * The best affordable card in a hand, as a hand index — or null when the
+ * side should stop: nothing affordable, or nothing worth its mana.
+ * Ties break toward the cheaper card, so mana is never wasted.
+ */
+export function choosePlay(state, side) {
+  const plays = legalPlays(state, side);
+  if (plays.length === 0) return null;
+  const who = state[side];
+  let best = null;
+  let bestScore = -Infinity;
+  for (const i of plays) {
+    const card = CARD_BY_ID[who.hand[i]];
+    const worth = cardValue(state, side, card);
+    const score = worth / card.cost - card.cost * 0.01;
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
     }
-    if (best < 0) break;
-    mana -= CARDS[hand[best]].cost;
-    plays.push(hand[best]);
-    hand.splice(best, 1);
   }
-  return plays;
+  if (best === null || bestScore <= 0) return null;
+  return best;
+}
+
+/**
+ * Play a whole turn for a side: keep choosing until the chooser stops.
+ * Returns the events, in order, for the table to show.
+ * (world.endTurn calls this for Cinder; the autopilot calls it for Asha.)
+ */
+export function playTurn(state, side, playCardFn) {
+  const events = [];
+  let guard = 0;
+  while (state.phase === 'play' && guard++ < 40) {
+    const pick = choosePlay(state, side);
+    if (pick === null) break;
+    events.push(...playCardFn(state, side, pick));
+  }
+  return events;
 }

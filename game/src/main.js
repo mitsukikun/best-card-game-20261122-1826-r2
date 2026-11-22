@@ -1,86 +1,126 @@
-// Ember Pact boot: canvas setup, fixed-step loop, best score, and the
-// ?shot= staging hook the screenshots use. The game scales to fit the
-// window while keeping its 1280x720 table.
+// Ember Pact — the table's keeper: boots the game, runs the loop, and
+// wires every move to the rules, the renderer and the sounds.
+// ?shot=start|play|win|loss stages a scene instead of a fresh duel.
 
-import { VIEW_H, VIEW_W } from "./config.js";
-import { createAudio } from "./audio.js";
-import { bindInput } from "./input.js";
-import { render } from "./render.js";
-import { stageShot } from "./shots.js";
-import { PHASE_LOSS, PHASE_WIN, bestScoreKey, createWorld, update } from "./world.js";
+import { VIEW_W, VIEW_H, CARD_BY_ID, LAYOUT } from './config.js';
+import { newGame, startDuel, playCard, endTurn, computeScore } from './world.js';
+import { choosePlay } from './ai.js';
+import { drawScene, handCardRect } from './render.js';
+import { wireInput, addFloater } from './input.js';
+import { makeSoundBoard } from './audio.js';
+import { buildShot } from './shots.js';
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-canvas.width = VIEW_W;
-canvas.height = VIEW_H;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const sounds = makeSoundBoard();
 
-const params = new URLSearchParams(location.search);
-const seed = Number(params.get("seed") || "7") || 7;
-const shot = params.get("shot") || "";
-const world = createWorld(seed);
-window.__emberWorld = world; // Debug hook for headless playtests only.
-const audio = createAudio();
-const ui = { hoverIndex: -1, hoverEnd: false, best: 0 };
-
-try {
-  ui.best = Number(localStorage.getItem(bestScoreKey()) || "0") || 0;
-} catch {
-  ui.best = 0;
+/** The seed of a fresh duel: the clock, so no two duels open alike. */
+function freshSeed() {
+  return (Date.now() % 2147483647) >>> 0;
 }
 
-function saveBest() {
-  if (world.score > ui.best) {
-    ui.best = world.score;
-    try {
-      localStorage.setItem(bestScoreKey(), String(ui.best));
-    } catch {
-      // Private mode or no storage: the best score is session-only.
+let state = newGame(freshSeed());
+let ui = null;
+
+/** Read the staged scene out of the address bar, if one is asked for. */
+function shotFromUrl() {
+  const shot = new URLSearchParams(window.location.search).get('shot');
+  return shot || '';
+}
+
+/** The table coordinates of a duelist's portrait, for floating numbers. */
+function fighterPoint(side) {
+  return side === 'player' ? { x: 1140, y: 640 } : { x: 140, y: 60 };
+}
+
+/** Show and hear what a played card did. */
+function showEvents(events, handIndex) {
+  const now = performance.now();
+  for (const e of events) {
+    const p = fighterPoint(e.target);
+    if (e.type === 'hit') {
+      addFloater(ui, p.x, p.y, `-${e.amount}`, '#ff6b4a', now);
+      sounds.play('hit');
+    } else if (e.type === 'block') {
+      addFloater(ui, p.x, p.y, `+${e.amount} block`, '#7fb3d5', now);
+      sounds.play('block');
+    } else if (e.type === 'heal') {
+      addFloater(ui, p.x, p.y, `+${e.amount}`, '#58b368', now);
+      sounds.play('heal');
+    } else if (e.type === 'draw') {
+      sounds.play('play');
     }
   }
+  if (state.phase === 'win') sounds.play('win');
+  if (state.phase === 'loss') sounds.play('loss');
 }
 
-bindInput(canvas, world, ui, audio);
+/** Asha plays a card from her hand. */
+function onPlay(handIndex) {
+  if (state.phase !== 'play' || state.turn !== 'player') return;
+  const cardId = state.player.hand[handIndex];
+  if (!cardId) return;
+  const card = CARD_BY_ID[cardId];
+  // Where the card sat, so the renderer can fly it to the table.
+  const rect = handCardRect(handIndex, state.player.hand.length, LAYOUT.playerHandY);
+  const events = playCard(state, 'player', handIndex);
+  if (events.length === 0) return;
+  ui.played = { card, born: performance.now(), fromX: rect.x + rect.w / 2, fromY: rect.y + rect.h / 2 };
+  showEvents(events);
+  ui.selected = -1;
+  state.score = computeScore(state);
+}
 
+/** Asha ends her turn; Cinder answers at once, then the next turn opens. */
+function onEndTurn() {
+  if (state.phase !== 'play' || state.turn !== 'player') return;
+  const events = endTurn(state, choosePlay);
+  showEvents(events);
+  state.score = computeScore(state);
+}
+
+/** A fresh duel from the title screen. */
+function onStart() {
+  sounds.unlock();
+  state = newGame(freshSeed());
+  startDuel(state);
+}
+
+/** Another duel from an end screen, same seed family, new shuffle. */
+function onAgain() {
+  sounds.unlock();
+  state = newGame(freshSeed());
+  startDuel(state);
+}
+
+ui = wireInput(canvas, {
+  state: () => state,
+  onPlay,
+  onEndTurn,
+  onStart,
+  onAgain,
+  onMute(muted) {
+    sounds.setMuted(muted);
+  },
+});
+
+/** Stage a scene for a screenshot, or leave a fresh title screen. */
+const shot = shotFromUrl();
 if (shot) {
-  const ok = stageShot(world, shot);
-  if (!ok) document.title = `Ember Pact — shot ${shot} did not reach its scene`;
-  if (world.phase === PHASE_WIN || world.phase === PHASE_LOSS) saveBest();
-} else {
-  document.title = "Ember Pact — a duel of cards";
+  const staged = buildShot(shot, 11);
+  state = staged.state;
+  document.title = `Ember Pact — ${shot}`;
 }
 
-function fit() {
-  const scale = Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H);
-  canvas.style.width = `${Math.floor(VIEW_W * scale)}px`;
-  canvas.style.height = `${Math.floor(VIEW_H * scale)}px`;
-}
-window.addEventListener("resize", fit);
-fit();
-
-let last = performance.now();
-let prevPhase = world.phase;
+// The loop: draw the table, sixty times a second, forever.
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  update(world, dt);
-  if (world.phase !== prevPhase) {
-    if (world.phase === PHASE_WIN) {
-      saveBest();
-      audio.play("win");
-    } else if (world.phase === PHASE_LOSS) {
-      saveBest();
-      audio.play("loss");
-    }
-    prevPhase = world.phase;
-  }
-  render(ctx, world, ui);
-  const status = document.getElementById("status");
-  if (status) {
-    status.textContent =
-      world.phase === "title"
-        ? "Ember Pact. Press Enter to duel Cinder."
-        : `Turn ${world.turn}. You have ${world.player.hp} health, Cinder has ${world.enemy.hp}.`;
-  }
+  drawScene(ctx, state, ui, now);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// The game is ready for the harness: no errors, canvas sized.
+window.__emberPact = {
+  state: () => state,
+  version: 'r2-fresh',
+};

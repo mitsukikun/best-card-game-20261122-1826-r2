@@ -1,25 +1,41 @@
-// Seeded RNG (mulberry32) so a duel can be replayed exactly: the same
-// seed shuffles the same decks and drives the same AI tie-breaks.
+// Ember Pact — the duel's only source of chance: a seeded RNG.
+// No Math.random anywhere in the game: the same seed plays the same duel.
 
-export function mulberry32(seed) {
+/**
+ * mulberry32: a small, fast seeded generator. Returns a function that
+ * yields a float in [0, 1) on every call, deterministically for its seed.
+ */
+export function makeRng(seed) {
   let a = seed >>> 0;
   return function next() {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-// Fisher-Yates shuffle driven by the given rng; returns a new array.
-export function shuffle(array, rng) {
-  const out = array.slice();
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rng() * (i + 1));
-    const tmp = out[i];
-    out[i] = out[j];
-    out[j] = tmp;
+/** A whole number in [0, n): the duel's die roll. */
+export function rollInt(rng, n) {
+  return Math.floor(rng() * n);
+}
+
+/**
+ * Fisher-Yates shuffle, in place, driven by the seeded RNG.
+ * Returns the same array, so callers can chain it.
+ */
+export function shuffle(rng, list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = rollInt(rng, i + 1);
+    const tmp = list[i];
+    list[i] = list[j];
+    list[j] = tmp;
   }
-  return out;
+  return list;
+}
+
+/** Pick one element of a list, uniformly, from the seeded RNG. */
+export function pick(rng, list) {
+  return list[rollInt(rng, list.length)];
 }
