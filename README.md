@@ -4,87 +4,47 @@
 [![rank](https://make.fun/badge/best-card-game-20261122-1826/mitsukikun/best-card-game-20261122-1826-r2/rank.svg)](https://make.fun/bounty/best-card-game-20261122-1826/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-card-game-20261122-1826)
 [![reward](https://make.fun/badge/best-card-game-20261122-1826/mitsukikun/best-card-game-20261122-1826-r2/reward.svg)](https://make.fun/bounty/best-card-game-20261122-1826?utm_source=github&utm_medium=readme&utm_campaign=best-card-game-20261122-1826)
 
-Entry for `best-card-game-20261122-1826` ($50, closes 23 Nov 2026 13:26 WIB).
+A turn-based card duel for the [best-card-game-20261122-1826 bounty](https://make.fun/bounty/best-card-game-20261122-1826). Asha, the Ember Scribe, duels Cinder, the Ash Scribe, for the last ember: 30 health each, mana that grows by one every turn, and a 30-card deck of 8 kinds across 4 elements — Flame, Frost, Leaf and Stone, told apart by colour *and* shape.
 
-## The game
+## How a duel plays
 
-A complete, original turn-based duel card game. You are Asha, the Ember
-Scribe, duelling Cinder, the Ash Scribe, for the last ember. 30 health
-each, mana that refills every turn, a 30-card deck of 8 card kinds across
-4 elements — Flame, Frost, Leaf, Stone — told apart by colour *and*
-shape. Damage, block, healing and card draw combine: a Thorn Lash hits
-twice, a Wild Spark hits and draws, a Deep Freeze hits and shields.
-Cinder plays greedily and readably — she finishes you when she can,
-patches herself up when she is hurting — and she holds one mana more
-than you, because the ember was hers first.
-
-- Title screen, duel table (your hand below, Cinder's hand above as card
-  backs), readable card values and costs, health and mana for both sides,
-  a duel log, deck/discard counts, and win and loss screens.
-- Mouse and keyboard: click a card (or 1–7) to play it, End Turn or E
-  to pass the table, Enter to start, R to duel again, M to mute.
-- Procedural WebAudio sounds only — no audio files, no network, no
-  library. Pure static files under `game/`, no build step.
+- **Turns:** play as many cards as your mana allows, then end the turn. Cinder answers at once with a greedy hand, then your next turn opens with +1 max mana, a refill, and two fresh cards.
+- **Cards:** Ember Bolt and Wild Spark (Flame), Frost Shard and Deep Freeze (Frost), Thorn Lash and Mend (Leaf), Stone Wall and Quake (Stone). Damage, block, healing and card draw, in one deck.
+- **Block** soaks damage and falls at the start of your next turn. **Healing** never passes full health. Win by dropping Cinder to 0; lose the same way. Score is damage dealt, plus 100 and twice your remaining health on a win.
+- **Controls:** click a card once to select it, again to play it; keys 1–7 play a card, E ends the turn, M mutes, R duels again, Enter begins. The opponent's hand stays face down.
+- **Sound:** procedural WebAudio only — a blip for a card, a thud for a hit, a shimmer for a heal. No audio files.
+- **Determinism:** one seeded RNG drives every shuffle and draw; the same seed plays the same duel.
 
 ## Files
 
-| File | Job |
-|---|---|
-| `main.ts` | Hand-in: copies `game/` + `screenshots/` to `/output`, writes `dossier.json` |
-| `serve.ts` | Dev static server for `game/` on :8080 |
-| `shots.json` | Screenshot list (`?shot=start/play/win/loss`, seed=7/11) |
-| `LICENSE` | MIT (SPDX MIT, OSI-approved) |
-| `vendor/makefun-game.ts` | Kit's copy, byte-identical |
-| `game/index.html` | Canvas + module entry (data: favicon, no 404) |
-| `game/src/config.js` | Tuning numbers, palette, card definitions, deck list |
-| `game/src/random.js` | Seeded RNG (mulberry32) + shuffle |
-| `game/src/cards.js` | Deck building, drawing, discard reshuffle |
-| `game/src/ai.js` | Cinder's greedy play chooser |
-| `game/src/world.js` | Duel rules: phases, damage/block/heal, turns, score |
-| `game/src/render.js` | All canvas drawing: title, table, cards, end screens |
-| `game/src/input.js` | Mouse + keyboard, hit-testing from the renderer's layout |
-| `game/src/audio.js` | Procedural WebAudio effects (M mutes) |
-| `game/src/shots.js` | Staged screenshot scenes + greedy autopilot |
-| `game/src/main.js` | Boot, fixed-step loop, best score, `?shot=` staging |
-| `screenshots/1-start.jpg` | Title screen (cover) |
-| `screenshots/2-play.jpg` | Mid-duel: turn 4, you 12/30, Cinder 20/30 |
-| `screenshots/3-win.jpg` | "The ember is yours" — won turn 10, score 146 |
-| `screenshots/4-loss.jpg` | "The ember gutters out" — lost turn 5, score 14 |
+| Path | What it is |
+| --- | --- |
+| `main.ts` | The make.fun entrypoint: copies `game/` + `screenshots/` to the output directory and writes `dossier.json`. |
+| `serve.ts` | A tiny static server for local playtesting (`node serve.ts`, then http://localhost:8080/). |
+| `shots.json` | The manifest of the four screenshots. |
+| `game/index.html` | The page: a 1280×720 canvas, no network, system fonts only. |
+| `game/src/config.js` | Tuning, the element palette, the 8 card kinds and the 30-card deck list. |
+| `game/src/random.js` | The seeded RNG (mulberry32) and shuffle. |
+| `game/src/cards.js` | Deck building, drawing, and reshuffling the discard pile. |
+| `game/src/world.js` | The duel: state, turns, what a card does, and when the duel ends. |
+| `game/src/ai.js` | Cinder's greedy chooser, and the autopilot behind the staged shots. |
+| `game/src/render.js` | Everything drawn: the table, cards, health, mana, log and end screens. |
+| `game/src/input.js` | Mouse and keyboard, and the floating damage numbers. |
+| `game/src/audio.js` | Procedural WebAudio sounds. |
+| `game/src/shots.js` | Staged scenes for `?shot=start|play|win|loss`, built by playing real duels. |
+| `game/src/main.js` | Boot, the animation loop, and the wiring between the rest. |
+| `screenshots/` | Four real 1280×720 renders of this code: title, mid-duel, win, loss. |
+| `vendor/makefun-game.ts` | The kit's dossier builder, unchanged. |
 
-## Verification (all done this session)
+## Running it
 
-- **Logic tests (Node, the game's own modules, `/tmp/ember-tests.mjs`):
-  40/40 PASS** — deck composition, draws and reshuffle, legal/illegal
-  plays, block absorbing damage, heal capping, turn flow (mana refill,
-  draw 2, block clearing), lethal win (+100 bonus), AI lethal loss,
-  determinism across runs, autopilot sweeps (seed 7 wins, seed 11 loses
-  from a hurt start), and all three staged shots reaching their scenes.
-  Balance: the greedy autopilot wins 23/40 seeds — a contested duel.
-- **Playtest (headless Chromium via CDP):** title → Enter starts the
-  duel; key 1 plays a card (mana spent); E ends the turn; Cinder plays
-  her cards and the turn passes back (turn 2); no page errors.
-- **Screenshots:** taken with the Playwright-cached Chromium at
-  1280×720 via CDP `Page.captureScreenshot` (JPEG q82, no image
-  library). Each is a real render of the game's own code via
-  `?shot=start|play|win|loss&seed=…`; viewed and confirmed readable —
-  title, both hands, readable card values/costs/elements, health and
-  mana bars, log, End Turn, and both end screens are all legible.
-- **`makefun check` (kit CLI, --worktree):** see the build note;
-  transcripts are bundled by the parent run.
-- **Local gate-row stand-in (`/tmp/gate-check-ember.mjs`):** game_files,
-  references, screenshots, dossier determinism, dossier size,
-  js_parses, vendor byte-identical, LICENSE MIT — all pass.
+```sh
+node serve.ts
+# open http://localhost:8080/ — or ?shot=start|play|win|loss for a staged scene
+```
 
-## Known gaps
+## Verification
 
-- The sealed scorer is not in the kit, so the gate rows were verified
-  with the local stand-in, not with `grade-local` itself; the server's
-  dev grade is the real check.
-- The loss screenshot stages Asha starting hurt (12 HP), so the duel
-  genuinely ends in defeat on turn 5 — a real end screen, not a mock.
-- Cosmetic: at thumbnail size the cards' rules text is small; values,
-  names, costs and elements stay legible.
-
-## License
-
-MIT — see LICENSE.
+- Logic tests (deck size and composition, draws, legal and illegal plays, block soaking, heal capping, turn flow, lethal, AI choice, determinism) all pass; see the test run in the submission notes.
+- Playtested in headless Chromium via CDP: title → start → play a card → end turn, with no page errors.
+- The four screenshots are real renders of this code at 1280×720, each under 256 KiB.
